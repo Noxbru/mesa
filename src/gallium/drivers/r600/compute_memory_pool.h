@@ -53,6 +53,8 @@ struct compute_memory_pool
 	struct compute_memory_item* item_list; ///Allocated memory chunks in the buffer,they must be ordered by "start_in_dw"
 	struct r600_screen *screen;
 
+	int fragmented; /// 1 if the pool buffer is fragmented
+
 	uint32_t *shadow; ///host copy of the pool, used for defragmentation
 };
 

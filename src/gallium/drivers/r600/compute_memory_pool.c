@@ -73,6 +73,7 @@ static void compute_memory_pool_init(struct compute_memory_pool * pool,
 	pool->size_in_dw = initial_size_in_dw;
 	pool->bo = (struct r600_resource*)r600_compute_buffer_alloc_vram(pool->screen,
 							pool->size_in_dw * 4);
+	pool->fragmented = 0;
 }
 
 /**
@@ -285,23 +286,9 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 		}
 	}
 
-	/* If we require more space than the size of the pool, then grow the
-	 * pool.
-	 *
-	 * XXX: I'm pretty sure this won't work.  Imagine this scenario:
-	 *
-	 * Offset Item Size
-	 *   0    A    50
-	 * 200    B    50
-	 * 400    C    50
-	 *
-	 * Total size = 450
-	 * Allocated size = 150
-	 * Pending Item D Size = 200
-	 *
-	 * In this case, there are 300 units of free space in the pool, but
-	 * they aren't contiguous, so it will be impossible to allocate Item D.
-	 */
+	if (pool->fragmented)
+		compute_memory_defrag(pool,pipe);
+
 	if (pool->size_in_dw < allocated+unallocated) {
 		err = compute_memory_grow_pool(pool, pipe, allocated+unallocated);
 		if (err == -1)
@@ -407,6 +394,8 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
 	assert(map);
 	memcpy(map , pool->shadow, pool->size_in_dw*4);
 	pipe->transfer_unmap(pipe, xfer);
+
+	pool->fragmented = 0;
 }
 
 void compute_memory_free(struct compute_memory_pool* pool, int64_t id)
@@ -428,6 +417,7 @@ void compute_memory_free(struct compute_memory_pool* pool, int64_t id)
 
 			if (item->next) {
 				item->next->prev = item->prev;
+				pool->fragmented = 1;
 			}
 
 			free(item);
