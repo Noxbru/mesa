@@ -370,6 +370,44 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	return 0;
 }
 
+void compute_memory_defrag(struct compute_memory_pool *pool,
+	struct pipe_context *pipe)
+{
+	struct compute_memory_item *item;
+	int64_t last_pos;
+
+	struct pipe_resource *gart = (struct pipe_resource *)pool->bo;
+	struct pipe_transfer *xfer;
+	uint32_t *map;
+
+	map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_READ,
+			&(struct pipe_box) { .width = pool->size_in_dw * 4,
+			.height = 1, .depth = 1 }, &xfer);
+	assert(xfer);
+	assert(map);
+	memcpy(pool->shadow, map, pool->size_in_dw*4);
+	pipe->transfer_unmap(pipe, xfer);
+
+	last_pos = 0;
+	for (item = pool->item_list; item; item = item->next) {
+		if (item->start_in_dw != last_pos) {
+			assert(item->start_in_dw > last_pos);
+			memmove(pool->shadow + last_pos, pool->shadow + item->start_in_dw,
+						item->size_in_dw * 4);
+			item->start_in_dw = last_pos;
+		}
+		last_pos = last_pos + item->size_in_dw;
+		last_pos += 1024 - (last_pos % 1024);
+	}
+
+	map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_WRITE,
+			&(struct pipe_box) { .width = pool->size_in_dw * 4,
+			.height = 1, .depth = 1 }, &xfer);
+	assert(xfer);
+	assert(map);
+	memcpy(map , pool->shadow, pool->size_in_dw*4);
+	pipe->transfer_unmap(pipe, xfer);
+}
 
 void compute_memory_free(struct compute_memory_pool* pool, int64_t id)
 {
