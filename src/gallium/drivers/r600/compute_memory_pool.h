@@ -65,10 +65,6 @@ struct compute_memory_pool
 struct compute_memory_pool* compute_memory_pool_new(struct r600_screen *rscreen); ///Creates a new pool
 void compute_memory_pool_delete(struct compute_memory_pool* pool); ///Frees all stuff in the pool and the pool struct itself too
 
-int64_t compute_memory_prealloc_chunk(struct compute_memory_pool* pool, int64_t size_in_dw); ///searches for an empty space in the pool, return with the pointer to the allocatable space in the pool, returns -1 on failure
-
-struct compute_memory_item* compute_memory_postalloc_chunk(struct compute_memory_pool* pool, int64_t start_in_dw); ///search for the chunk where we can link our new chunk after it
-
 int compute_memory_grow_pool(struct compute_memory_pool* pool, struct pipe_context * pipe,
 	int new_size_in_dw);
 
