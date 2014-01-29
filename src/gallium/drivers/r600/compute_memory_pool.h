@@ -51,6 +51,9 @@ struct compute_memory_pool
 
 	struct r600_resource *bo; ///The pool buffer object resource
 	struct compute_memory_item* item_list; ///Allocated memory chunks in the buffer,they must be ordered by "start_in_dw"
+	struct compute_memory_item* item_list_end; ///End of item_list
+	struct compute_memory_item* unallocated_list; ///Unallocated memory chunks
+	struct compute_memory_item* unallocated_list_end; ///End of unallocated_list
 	struct r600_screen *screen;
 
 	int fragmented; /// 1 if the pool buffer is fragmented

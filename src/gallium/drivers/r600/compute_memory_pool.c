@@ -227,8 +227,8 @@ void compute_memory_shadow(struct compute_memory_pool* pool,
 int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	struct pipe_context * pipe)
 {
-	struct compute_memory_item *pending_list = NULL, *end_p = NULL;
 	struct compute_memory_item *item, *next;
+	struct compute_memory_item *last_item;
 
 	int64_t allocated = 0;
 	int64_t unallocated = 0;
@@ -245,114 +245,70 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 			item->size_in_dw, item->size_in_dw * 4);
 	}
 
-	/* Search through the list of memory items in the pool */
-	for (item = pool->item_list; item; item = next) {
-		next = item->next;
+	/* allocated is the sum of all the item' size rounded
+	 * up to a multiple of 1024 */
+	for (item = pool->item_list; item; item = item->next) {
+		allocated += item->size_in_dw;
+		allocated += 1024 - (allocated % 1024);
+	}
 
-		/* Check if the item is pending. */
-		if (item->start_in_dw == -1) {
-			/* It is pending, so add it to the pending_list... */
-			if (end_p) {
-				end_p->next = item;
-			}
-			else {
-				pending_list = item;
-			}
-
-			/* ... and then remove it from the item list. */
-			if (item->prev) {
-				item->prev->next = next;
-			}
-			else {
-				pool->item_list = next;
-			}
-
-			if (next) {
-				next->prev = item->prev;
-			}
-
-			/* This sequence makes the item be at the end of the list */
-			item->prev = end_p;
-			item->next = NULL;
-			end_p = item;
-
-			/* Update the amount of space we will need to allocate. */
-			unallocated += item->size_in_dw+1024;
-		}
-		else {
-			/* The item is not pending, so update the amount of space
-			 * that has already been allocated. */
-			allocated += item->size_in_dw;
-		}
+	/* unallocated is the sum of all the unallocated item'
+	 * size rounded up to a multiple of 1024 */
+	for (item = pool->unallocated_list; item; item = item->next) {
+		unallocated += item->size_in_dw;
+		unallocated += 1024 - (unallocated % 1024);
 	}
 
 	if (pool->fragmented)
 		compute_memory_defrag(pool,pipe);
 
+	/* allocated + unallocated is the size that all the items
+	 * will use in the buffer, so we can grow the pool just
+	 * one time */
 	if (pool->size_in_dw < allocated+unallocated) {
 		err = compute_memory_grow_pool(pool, pipe, allocated+unallocated);
 		if (err == -1)
 			return -1;
 	}
 
-	/* Loop through all the pending items, allocate space for them and
-	 * add them back to the item_list. */
-	for (item = pending_list; item; item = next) {
+	last_item = pool->item_list_end;
+	/* This is equivalent to
+	 * start_in_dw = allocated;
+	 * but it's much clear this way */
+	if (last_item) {
+		start_in_dw = last_item->start_in_dw + last_item->size_in_dw;
+		start_in_dw+= 1024 - (start_in_dw % 1024);
+	}
+	else {
+		start_in_dw = 0;
+	}
+
+	/* Loop through the list of unallocated items, adding them
+	 * to the end of the list of allocated items */
+	for (item = pool->unallocated_list; item; item = next) {
 		next = item->next;
-
-		/* Search for free space in the pool for this item. */
-		while ((start_in_dw=compute_memory_prealloc_chunk(pool,
-						item->size_in_dw)) == -1) {
-			int64_t need = item->size_in_dw+2048 -
-						(pool->size_in_dw - allocated);
-
-			if (need < 0) {
-				need = pool->size_in_dw / 10;
-			}
-
-			need += 1024 - (need % 1024);
-
-			err = compute_memory_grow_pool(pool,
-					pipe,
-					pool->size_in_dw + need);
-
-			if (err == -1)
-				return -1;
-		}
-		COMPUTE_DBG(pool->screen, "  + Found space for Item %p id = %u "
-			"start_in_dw = %u (%u bytes) size_in_dw = %u (%u bytes)\n",
-			item, item->id, start_in_dw, start_in_dw * 4,
-			item->size_in_dw, item->size_in_dw * 4);
+		assert(start_in_dw + item->size_in_dw < pool->size_in_dw);
 
 		item->start_in_dw = start_in_dw;
 		item->next = NULL;
 		item->prev = NULL;
 
-		if (pool->item_list) {
-			struct compute_memory_item *pos;
-
-			pos = compute_memory_postalloc_chunk(pool, start_in_dw);
-			if (pos) {
-				item->prev = pos;
-				item->next = pos->next;
-				pos->next = item;
-				if (item->next) {
-					item->next->prev = item;
-				}
-			} else {
-				/* Add item to the front of the list */
-				item->next = pool->item_list;
-				item->prev = pool->item_list->prev;
-				pool->item_list->prev = item;
-				pool->item_list = item;
-			}
+		if (last_item) {
+			last_item->next = item;
+			item->prev = last_item;
 		}
 		else {
 			pool->item_list = item;
 		}
 
-		allocated += item->size_in_dw;
+		last_item = item;
+		start_in_dw += item->size_in_dw;
+		start_in_dw += 1024 - (start_in_dw % 1024);
 	}
+
+	pool->item_list_end = last_item;
+	pool->unallocated_list = NULL;
+	pool->unallocated_list_end = NULL;
 
 	return 0;
 }
@@ -419,6 +375,35 @@ void compute_memory_free(struct compute_memory_pool* pool, int64_t id)
 				item->next->prev = item->prev;
 				pool->fragmented = 1;
 			}
+			else {
+				pool->item_list_end = item->prev;
+			}
+
+			free(item);
+
+			return;
+		}
+	}
+
+	/* If unallocated items can't be freed, then this code
+	 * isn't necesary at all */
+	for (item = pool->unallocated_list; item; item = next) {
+		next = item->next;
+
+		if (item->id == id) {
+			if (item->prev) {
+				item->prev->next = item->next;
+			}
+			else {
+				pool->unallocated_list = item->next;
+			}
+
+			if (item->next) {
+				item->next->prev = item->prev;
+			}
+			else {
+				pool->unallocated_list_end = item->prev;
+			}
 
 			free(item);
 
@@ -450,20 +435,19 @@ struct compute_memory_item* compute_memory_alloc(
 		return NULL;
 
 	new_item->size_in_dw = size_in_dw;
-	new_item->start_in_dw = -1; /* mark pending */
 	new_item->id = pool->next_id++;
 	new_item->pool = pool;
 
-	if (pool->item_list) {
-		for (last_item = pool->item_list; last_item->next;
-						last_item = last_item->next);
+	last_item = pool->unallocated_list_end;
 
+	if (last_item) {
 		last_item->next = new_item;
 		new_item->prev = last_item;
 	}
 	else {
-		pool->item_list = new_item;
+		pool->unallocated_list = new_item;
 	}
+	pool->unallocated_list_end = new_item;
 
 	COMPUTE_DBG(pool->screen, "  + Adding item %p id = %u size = %u (%u bytes)\n",
 			new_item, new_item->id, new_item->size_in_dw,
