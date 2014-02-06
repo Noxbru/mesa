@@ -74,7 +74,7 @@ void compute_memory_shadow(struct compute_memory_pool* pool,
 int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	struct pipe_context * pipe);
 void compute_memory_defrag(struct compute_memory_pool *pool,
-	struct pipe_context *pipe);
+	struct pipe_context *pipe, int64_t allocated);
 void compute_memory_free(struct compute_memory_pool* pool, int64_t id);
 struct compute_memory_item* compute_memory_alloc(struct compute_memory_pool* pool, int64_t size_in_dw); ///Creates pending allocations
 

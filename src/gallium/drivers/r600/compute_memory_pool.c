@@ -190,7 +190,7 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	}
 
 	if (pool->fragmented)
-		compute_memory_defrag(pool,pipe);
+		compute_memory_defrag(pool,pipe,allocated);
 
 	/* allocated + unallocated is the size that all the items
 	 * will use in the buffer, so we can grow the pool just
@@ -244,7 +244,7 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 }
 
 void compute_memory_defrag(struct compute_memory_pool *pool,
-	struct pipe_context *pipe)
+	struct pipe_context *pipe, int64_t allocated)
 {
 	struct compute_memory_item *item;
 	int64_t last_pos;
@@ -253,19 +253,37 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
 	struct pipe_transfer *xfer;
 	uint32_t *map;
 
-	map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_READ,
-			&(struct pipe_box) { .width = pool->size_in_dw * 4,
-			.height = 1, .depth = 1 }, &xfer);
-	assert(xfer);
-	assert(map);
-	memcpy(pool->shadow, map, pool->size_in_dw*4);
-	pipe->transfer_unmap(pipe, xfer);
-
+	/* First, we look for the first fragmented item in the
+	 * item_list */
 	last_pos = 0;
 	for (item = pool->item_list; item; item = item->next) {
 		if (item->start_in_dw != last_pos) {
 			assert(item->start_in_dw > last_pos);
-			memmove(pool->shadow + last_pos, pool->shadow + item->start_in_dw,
+			break;
+		}
+		last_pos = last_pos + item->size_in_dw;
+		last_pos += 1024 - (last_pos % 1024);
+	}
+
+	/* Now, last_pos is the position of where the fragmented
+	 * item should be. Or the size of all the allocated items
+	 * if the pool isn't fragmented. */
+	if (last_pos == allocated) {
+		pool->fragmented = 0;
+		return;
+	}
+
+	map = pipe->transfer_map(pipe, gart, 0,
+			PIPE_TRANSFER_READ_WRITE,
+			&(struct pipe_box) { .width = pool->size_in_dw * 4,
+			.height = 1, .depth = 1 }, &xfer);
+	assert(xfer);
+	assert(map);
+
+	for ( ; item; item = item->next) {
+		if (item->start_in_dw != last_pos) {
+			assert(item->start_in_dw > last_pos);
+			memmove(map + last_pos, map + item->start_in_dw,
 						item->size_in_dw * 4);
 			item->start_in_dw = last_pos;
 		}
@@ -273,12 +291,6 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
 		last_pos += 1024 - (last_pos % 1024);
 	}
 
-	map = pipe->transfer_map(pipe, gart, 0, PIPE_TRANSFER_WRITE,
-			&(struct pipe_box) { .width = pool->size_in_dw * 4,
-			.height = 1, .depth = 1 }, &xfer);
-	assert(xfer);
-	assert(map);
-	memcpy(map , pool->shadow, pool->size_in_dw*4);
 	pipe->transfer_unmap(pipe, xfer);
 
 	pool->fragmented = 0;
