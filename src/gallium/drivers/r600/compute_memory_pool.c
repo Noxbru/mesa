@@ -95,8 +95,10 @@ void compute_memory_pool_delete(struct compute_memory_pool* pool)
  * @returns -1 if it fails, 0 otherwise
  */
 int compute_memory_grow_pool(struct compute_memory_pool* pool,
-	struct pipe_context * pipe, int new_size_in_dw)
+	struct pipe_context * pipe, int64_t allocated, int64_t unallocated)
 {
+	uint64_t new_size_in_dw = allocated + unallocated;
+
 	COMPUTE_DBG(pool->screen, "* compute_memory_grow_pool() "
 		"new_size_in_dw = %d (%d bytes)\n",
 		new_size_in_dw, new_size_in_dw * 4);
@@ -113,7 +115,7 @@ int compute_memory_grow_pool(struct compute_memory_pool* pool,
 		COMPUTE_DBG(pool->screen, "  Aligned size = %d (%d bytes)\n",
 			new_size_in_dw, new_size_in_dw * 4);
 
-		compute_memory_shadow(pool, pipe, 1);
+		compute_memory_shadow(pool, pipe, 1, allocated);
 		pool->shadow = realloc(pool->shadow, new_size_in_dw*4);
 		if (pool->shadow == NULL)
 			return -1;
@@ -125,7 +127,7 @@ int compute_memory_grow_pool(struct compute_memory_pool* pool,
 		pool->bo = (struct r600_resource*)r600_compute_buffer_alloc_vram(
 							pool->screen,
 							pool->size_in_dw * 4);
-		compute_memory_shadow(pool, pipe, 0);
+		compute_memory_shadow(pool, pipe, 0, allocated);
 	}
 
 	return 0;
@@ -135,7 +137,8 @@ int compute_memory_grow_pool(struct compute_memory_pool* pool,
  * Copy pool from device to host, or host to device.
  */
 void compute_memory_shadow(struct compute_memory_pool* pool,
-	struct pipe_context * pipe, int device_to_host)
+	struct pipe_context * pipe, int device_to_host,
+	int64_t allocated)
 {
 	struct compute_memory_item chunk;
 
@@ -147,7 +150,7 @@ void compute_memory_shadow(struct compute_memory_pool* pool,
 	chunk.size_in_dw = pool->size_in_dw;
 	chunk.prev = chunk.next = NULL;
 	compute_memory_transfer(pool, pipe, device_to_host, &chunk,
-				pool->shadow, 0, pool->size_in_dw*4);
+				pool->shadow, 0, allocated*4);
 }
 
 /**
@@ -196,7 +199,7 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	 * will use in the buffer, so we can grow the pool just
 	 * one time */
 	if (pool->size_in_dw < allocated+unallocated) {
-		err = compute_memory_grow_pool(pool, pipe, allocated+unallocated);
+		err = compute_memory_grow_pool(pool, pipe, allocated, unallocated);
 		if (err == -1)
 			return -1;
 	}

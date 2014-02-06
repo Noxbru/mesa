@@ -66,10 +66,11 @@ struct compute_memory_pool* compute_memory_pool_new(struct r600_screen *rscreen)
 void compute_memory_pool_delete(struct compute_memory_pool* pool); ///Frees all stuff in the pool and the pool struct itself too
 
 int compute_memory_grow_pool(struct compute_memory_pool* pool, struct pipe_context * pipe,
-	int new_size_in_dw);
+	int64_t allocated, int64_t unallocated);
 
 void compute_memory_shadow(struct compute_memory_pool* pool,
-	struct pipe_context * pipe, int device_to_host);
+	struct pipe_context * pipe, int device_to_host,
+	int64_t allocated);
 
 int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	struct pipe_context * pipe);
