@@ -184,6 +184,8 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 		allocated += item->size_in_dw;
 		allocated += 1024 - (allocated % 1024);
 	}
+	COMPUTE_DBG(pool->screen, "  - Allocated size used = %i (%i bytes)\n",
+			allocated, allocated*4);
 
 	/* unallocated is the sum of all the unallocated item'
 	 * size rounded up to a multiple of 1024 */
@@ -191,6 +193,8 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 		unallocated += item->size_in_dw;
 		unallocated += 1024 - (unallocated % 1024);
 	}
+	COMPUTE_DBG(pool->screen, "  - Unallocated size used = %i (%i bytes)\n",
+			unallocated, unallocated*4);
 
 	if (pool->fragmented)
 		compute_memory_defrag(pool,pipe,allocated);
@@ -225,6 +229,10 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 		item->start_in_dw = start_in_dw;
 		item->next = NULL;
 		item->prev = NULL;
+
+		COMPUTE_DBG(pool->screen, "  + Adding item %ld at position "
+				"%ld, size = %lu (%lu bytes)\n", item->id,
+				item->start_in_dw, item->size_in_dw, item->size_in_dw*4);
 
 		if (last_item) {
 			last_item->next = item;
@@ -276,6 +284,8 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
 		return;
 	}
 
+	COMPUTE_DBG(pool->screen, "* compute_memory_defrag()\n");
+
 	map = pipe->transfer_map(pipe, gart, 0,
 			PIPE_TRANSFER_READ_WRITE,
 			&(struct pipe_box) { .width = pool->size_in_dw * 4,
@@ -286,6 +296,11 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
 	for ( ; item; item = item->next) {
 		if (item->start_in_dw != last_pos) {
 			assert(item->start_in_dw > last_pos);
+			COMPUTE_DBG(pool->screen, " + moving item %ld from %ld "
+					"to %ld, size = %ld (%ld bytes)\n",item->id,
+					item->start_in_dw, last_pos,
+					item->size_in_dw, item->size_in_dw*4);
+
 			memmove(map + last_pos, map + item->start_in_dw,
 						item->size_in_dw * 4);
 			item->start_in_dw = last_pos;
