@@ -170,6 +170,10 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 
 	int err = 0;
 
+	/* If there's no elements to add, just return */
+	if (pool->unallocated_list == NULL)
+		return;
+
 	COMPUTE_DBG(pool->screen, "* compute_memory_finalize_pending()\n");
 
 	for (item = pool->item_list; item; item = item->next) {
