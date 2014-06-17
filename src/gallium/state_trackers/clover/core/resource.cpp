@@ -174,6 +174,8 @@ mapping::mapping(command_queue &q, resource &r,
    pctx(q.pipe) {
    unsigned usage = ((flags & CL_MAP_WRITE ? PIPE_TRANSFER_WRITE : 0 ) |
                      (flags & CL_MAP_READ ? PIPE_TRANSFER_READ : 0 ) |
+                     (flags & CLOVER_TRANSFER_MAP_DIRECTLY ?
+                              PIPE_TRANSFER_MAP_DIRECTLY : 0 ) |
                      (!blocking ? PIPE_TRANSFER_UNSYNCHRONIZED : 0));
 
    p = pctx->transfer_map(pctx, r.pipe, 0, usage,

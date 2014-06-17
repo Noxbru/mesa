@@ -33,6 +33,10 @@
 #include "core/property.hpp"
 #include "api/dispatch.hpp"
 
+#ifndef CLOVER_TRANSFER_MAP_DIRECTLY
+#define CLOVER_TRANSFER_MAP_DIRECTLY (1<<8)
+#endif
+
 ///
 /// Main namespace of the CL state tracker.
 ///

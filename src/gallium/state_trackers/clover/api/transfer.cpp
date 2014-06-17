@@ -174,8 +174,8 @@ namespace {
       static mapping
       get(command_queue &q, T obj, cl_map_flags flags,
           size_t offset, size_t size) {
-         return { q, obj->resource(q), flags, true,
-                  {{ offset }}, {{ size, 1, 1 }} };
+         return { q, obj->resource(q), flags | CLOVER_TRANSFER_MAP_DIRECTLY,
+                  true, {{ offset }}, {{ size, 1, 1 }} };
       }
    };
 
