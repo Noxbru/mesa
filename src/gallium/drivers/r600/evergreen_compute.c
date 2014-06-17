@@ -967,17 +967,27 @@ void *r600_compute_global_transfer_map(
 	struct r600_resource_global* buffer =
 		(struct r600_resource_global*)resource;
 
-	struct pipe_resource *dst;
+	struct pipe_resource *dst =
+		(struct pipe_resource *) buffer->chunk->real_buffer;
 	unsigned offset = box->x;
 
+	/* If the item is already in the pool, and we are going
+	 * to read/write it, map it directly without demoting it */
 	if (is_item_in_pool(buffer->chunk)) {
-		compute_memory_demote_item(pool, buffer->chunk, ctx_);
+		if (usage & PIPE_TRANSFER_MAP_DIRECTLY) {
+			dst = (struct pipe_resource *) buffer->chunk->pool->bo;
+			offset += (buffer->chunk->start_in_dw * 4);
+		}
+		else {
+			compute_memory_demote_item(pool, buffer->chunk, ctx_);
+			dst = (struct pipe_resource *) buffer->chunk->real_buffer;
+		}
 	}
 
-	dst = (struct pipe_resource*)buffer->chunk->real_buffer;
-
-	if (usage & PIPE_TRANSFER_READ)
+	if ((usage & PIPE_TRANSFER_READ) && !(usage & PIPE_TRANSFER_MAP_DIRECTLY))
 		buffer->chunk->status |= ITEM_MAPPED_FOR_READING;
+
+	usage &= ~PIPE_TRANSFER_MAP_DIRECTLY;
 
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
 			"level = %u, usage = %u, box(x = %u, y = %u, z = %u "
