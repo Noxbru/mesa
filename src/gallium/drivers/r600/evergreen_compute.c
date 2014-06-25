@@ -970,9 +970,15 @@ void *r600_compute_global_transfer_map(
 	struct r600_resource_global* buffer =
 		(struct r600_resource_global*)resource;
 
+	struct r600_transfer_global *trans = NULL;
+	uint8_t *data;
+
 	struct compute_memory_item *item = buffer->chunk;
 	struct pipe_resource *dst = NULL;
 	unsigned offset = box->x;
+
+	trans = CALLOC(1, sizeof(struct r600_transfer_global));
+	trans->resource = resource;
 
 	if (is_item_in_pool(item)) {
 		compute_memory_demote_item(pool, item, ctx_);
@@ -1004,8 +1010,11 @@ void *r600_compute_global_transfer_map(
 	assert(box->z == 0);
 
 	///TODO: do it better, mapping is not possible if the pool is too big
-	return pipe_buffer_map_range(ctx_, dst,
-			offset, box->width, usage, ptransfer);
+	data = pipe_buffer_map_range(ctx_, dst,
+			offset, box->width, usage, &trans->ptransfer);
+
+	*ptransfer = (struct pipe_transfer *)trans;
+	return data;
 }
 
 void r600_compute_global_transfer_unmap(
@@ -1022,7 +1031,22 @@ void r600_compute_global_transfer_unmap(
 	 * vtable which calls r600_buffer_transfer_map() rather than
 	 * this function.
 	 */
-	assert (!"This function should not be called");
+	/*assert (!"This function should not be called");*/
+
+	struct r600_context *rctx = (struct r600_context *)ctx_;
+	struct r600_transfer_global *trans =
+		(struct r600_transfer_global *)transfer;
+	struct r600_resource_global *buffer =
+		(struct r600_resource_global *)trans->resource;
+    struct compute_memory_item *item = buffer->chunk;
+
+	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
+			"Unmaping Buffer: %u\n", item->id);
+
+	ctx_->transfer_unmap(ctx_, trans->ptransfer);
+	item->map_count--;
+
+	FREE(trans);
 }
 
 void r600_compute_global_transfer_flush_region(

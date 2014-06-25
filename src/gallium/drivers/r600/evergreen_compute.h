@@ -38,6 +38,11 @@ struct r600_resource_global {
 	struct compute_memory_item *chunk;
 };
 
+struct r600_transfer_global {
+	struct pipe_resource *resource;
+	struct pipe_transfer *ptransfer;
+};
+
 void *evergreen_create_compute_state(struct pipe_context *ctx, const struct pipe_compute_state *cso);
 void evergreen_delete_compute_state(struct pipe_context *ctx, void *state);
 void evergreen_compute_upload_input(struct pipe_context *context, const uint *block_layout, const uint *grid_layout, const void *input);
