@@ -39,6 +39,7 @@ struct compute_memory_item
 	int64_t id; ///ID of the memory chunk
 
 	uint32_t status; ///Will track the status of the item
+	uint32_t map_count; ///Will track the number of maps done to the item
 
 	int64_t start_in_dw; ///Start pointer in dwords relative in the pool bo
 	int64_t size_in_dw; ///Size of the chunk in dwords

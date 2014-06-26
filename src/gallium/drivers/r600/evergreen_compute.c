@@ -986,8 +986,7 @@ void *r600_compute_global_transfer_map(
 
 	dst = (struct pipe_resource*)item->real_buffer;
 
-	if (usage & PIPE_TRANSFER_READ)
-		buffer->chunk->status |= ITEM_MAPPED_FOR_READING;
+	item->map_count++;
 
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
 			"level = %u, usage = %u, box(x = %u, y = %u, z = %u "
