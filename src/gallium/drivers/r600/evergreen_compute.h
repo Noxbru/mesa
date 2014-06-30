@@ -41,6 +41,8 @@ struct r600_resource_global {
 struct r600_transfer_global {
 	struct pipe_resource *resource;
 	struct pipe_transfer *ptransfer;
+
+	struct r600_transfer_global *next;
 };
 
 void *evergreen_create_compute_state(struct pipe_context *ctx, const struct pipe_compute_state *cso);

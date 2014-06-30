@@ -182,6 +182,7 @@ int compute_memory_grow_pool(struct compute_memory_pool* pool,
 		compute_memory_pool_init(pool, MAX2(new_size_in_dw, 1024 * 16));
 	} else {
 		struct r600_resource *temp = NULL;
+		struct compute_memory_item *item = NULL;
 
 		new_size_in_dw = align(new_size_in_dw, ITEM_ALIGNMENT);
 
@@ -229,6 +230,12 @@ int compute_memory_grow_pool(struct compute_memory_pool* pool,
 					pool->screen,
 					pool->size_in_dw * 4);
 			compute_memory_shadow(pool, pipe, 0);
+		}
+
+		LIST_FOR_EACH_ENTRY(item, pool->item_list, link) {
+			if (item->transfer_list != NULL) {
+				compute_memory_item_update_transfers(item, 1);
+			}
 		}
 	}
 
@@ -385,15 +392,17 @@ int compute_memory_promote_item(struct compute_memory_pool *pool,
 				dst, 0, item->start_in_dw * 4, 0 ,0,
 				src, 0, &box);
 
+		if (item->transfer_list != NULL) {
+			compute_memory_item_update_transfers(item, 0);
+		}
+
 		/* We check if the item is mapped. At this point, only
 		 * buffers mapped for reading should still be mapped.
 		 * In this case, we need to keep the temporary buffer 'alive'
 		 * because it is possible to keep a map active for reading
 		 * while a kernel (that reads from it) executes */
-		if (item->map_count == 0) {
 			pool->screen->b.b.resource_destroy(screen, src);
 			item->real_buffer = NULL;
-		}
 	}
 
 	return 0;
@@ -432,6 +441,18 @@ void compute_memory_demote_item(struct compute_memory_pool *pool,
 
 	/* Remember to mark the buffer as 'pending' by setting start_in_dw to -1 */
 	item->start_in_dw = -1;
+}
+
+void compute_memory_item_update_transfers(struct compute_memory_item *item,
+		int was_in_pool)
+{
+	struct r600_transfer_global *trans;
+
+	for (trans = item->transfer_list; trans != NULL; trans = trans->next) {
+		trans->ptransfer->resource = item->pool->bo;
+		if (was_in_pool == 0)
+			trans->ptransfer->box.x += item->start_in_dw * 4;
+	}
 }
 
 void compute_memory_free(struct compute_memory_pool* pool, int64_t id)

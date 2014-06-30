@@ -981,18 +981,28 @@ void *r600_compute_global_transfer_map(
 	trans->resource = resource;
 
 	if (is_item_in_pool(item)) {
-		compute_memory_demote_item(pool, item, ctx_);
+		dst = (struct pipe_resource *)pool->bo;
+		offset += item->start_in_dw * 4;
 	}
 	else {
 		if (item->real_buffer == NULL) {
 			item->real_buffer = (struct r600_resource*)
 					r600_compute_buffer_alloc_vram(pool->screen, item->size_in_dw * 4);
 		}
+		dst = (struct pipe_resource *)item->real_buffer;
 	}
 
-	dst = (struct pipe_resource*)item->real_buffer;
-
 	item->map_count++;
+
+	if (item->transfer_list != NULL) {
+		struct r600_transfer_global *temp;
+
+		for (temp = item->transfer_list; temp->next != NULL; temp = temp->next);
+		temp->next = trans;
+	}
+	else {
+		item->transfer_list = trans;
+	}
 
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
 			"level = %u, usage = %u, box(x = %u, y = %u, z = %u "
@@ -1040,11 +1050,22 @@ void r600_compute_global_transfer_unmap(
 		(struct r600_resource_global *)trans->resource;
     struct compute_memory_item *item = buffer->chunk;
 
+
 	COMPUTE_DBG(rctx->screen, "* r600_compute_global_transfer_map()\n"
 			"Unmaping Buffer: %u\n", item->id);
 
 	ctx_->transfer_unmap(ctx_, trans->ptransfer);
 	item->map_count--;
+
+	if (item->transfer_list != trans) {
+		struct r600_transfer_global *temp;
+
+		for (temp = item->transfer_list; temp->next != trans; temp = temp->next);
+		temp->next = temp->next->next;
+	}
+	else {
+		item->transfer_list = item->transfer_list->next;
+	}
 
 	FREE(trans);
 }
